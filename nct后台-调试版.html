@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>NCT 后台 - 调试版</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+body{
+  font-family:sans-serif;
+  padding:40px;
+  background:#f5f5f5;
+  margin:0;
+}
+.debug-panel{
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  background:#fff3cd;
+  color:#856404;
+  padding:15px;
+  border-bottom:2px solid #ffc107;
+  z-index:9999;
+  font-size:14px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.1);
+}
+.debug-log{
+  background:#f8f9fa;
+  padding:10px;
+  margin-top:10px;
+  border-radius:8px;
+  max-height:300px;
+  overflow-y:auto;
+  font-family:monospace;
+  font-size:12px;
+  white-space:pre-wrap;
+}
+.error{color:#e74c3c;font-weight:bold;}
+.success{color:#27ae60;font-weight:bold;}
+.warning{color:#f39c12;font-weight:bold;}
+.info{color:#3498db;font-weight:bold;}
+.card{
+  background:white;
+  padding:20px;
+  border-radius:16px;
+  margin-bottom:20px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.1);
+  margin-top:400px;
+}
+button{
+  background:#667eea;
+  color:white;
+  border:none;
+  padding:12px 24px;
+  border-radius:8px;
+  font-size:16px;
+  cursor:pointer;
+  margin:5px;
+}
+button:hover{
+  background:#764ba2;
+}
+.loading{
+  text-align:center;
+  padding:40px;
+  font-size:18px;
+  color:#666;
+}
+</style>
+</head>
+
+<body>
+
+<div class="debug-panel">
+  <strong>🔍 NCT 后台调试面板</strong>
+  <button onclick="testSupabase()" style="float:right;margin-top:-5px;">🧪 测试 Supabase</button>
+  <button onclick="testLocalStorage()" style="float:right;margin-top:-5px;">💾 测试 localStorage</button>
+  <button onclick="clearLog()" style="float:right;margin-top:-5px;">🗑️ 清空日志</button>
+  <div id="debug-log" class="debug-log"></div>
+</div>
+
+<div class="card">
+  <h2>📊 页面内容</h2>
+  <div id="content">
+    <div class="loading">⏳ 正在加载...</div>
+  </div>
+</div>
+
+<script>
+// 调试日志系统
+const debugLog = [];
+
+function log(message, type='info'){
+  const timestamp = new Date().toLocaleTimeString('zh-CN');
+  const logMessage = `[${timestamp}] ${message}`;
+  debugLog.push({message:logMessage, type:type});
+  
+  const logDiv = document.getElementById('debug-log');
+  logDiv.innerHTML = debugLog.map(item => 
+    `<div class="${item.type}">${item.message}</div>`
+  ).join('');
+  logDiv.scrollTop = logDiv.scrollHeight;
+  
+  console.log(logMessage);
+}
+
+function clearLog(){
+  debugLog.length = 0;
+  document.getElementById('debug-log').innerHTML = '<div class="info">日志已清空</div>';
+}
+
+// 捕获所有错误
+window.onerror = function(msg, url, lineNo, columnNo, error){
+  log(`❌ JavaScript 错误: ${msg}`, 'error');
+  log(`   位置: ${url}:${lineNo}:${columnNo}`, 'error');
+  if(error) log(`   堆栈: ${error.stack}`, 'error');
+  return false;
+};
+
+// 捕获 Promise 错误
+window.addEventListener('unhandledrejection', function(event){
+  log(`❌ Promise 错误: ${event.reason}`, 'error');
+});
+
+log('🚀 页面开始加载...', 'info');
+
+// Supabase 配置
+const supabaseUrl='https://kwxhzcrzhswgrxfuyjpv.supabase.co';
+const supabaseKey='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3eGh6Y3J6aHN3Z3J4ZnV5anB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NDA0MzksImV4cCI6MjA5NTUxNjQzOX0.XZ3yjbLOLae5oknq3WBNBPfVgmZbDOS6125nP7mjLOo';
+
+log('⚙️ Supabase 配置已加载', 'info');
+log(`   URL: ${supabaseUrl}`, 'info');
+log(`   Key: ${supabaseKey.substring(0,20)}...`, 'info');
+
+let supabaseClient;
+
+try{
+  log('🔌 正在初始化 Supabase 客户端...', 'info');
+  supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+  log('✅ Supabase 客户端初始化成功', 'success');
+}catch(e){
+  log(`❌ Supabase 客户端初始化失败: ${e.message}`, 'error');
+}
+
+// 测试 Supabase 连接
+async function testSupabase(){
+  log('🧪 开始测试 Supabase 连接...', 'info');
+  
+  try{
+    log('📡 正在查询 test_results 表...', 'info');
+    
+    const { data, error } = await supabaseClient
+      .from('test_results')
+      .select('*')
+      .limit(5);
+    
+    if(error){
+      log(`❌ 查询失败: ${error.message}`, 'error');
+      log(`   错误代码: ${error.code}`, 'error');
+      log(`   错误详情: ${JSON.stringify(error)}`, 'error');
+      
+      if(error.message.includes('RLS')){
+        log('💡 提示: 可能是 RLS 策略问题，请检查 Supabase 控制台', 'warning');
+      }
+      if(error.message.includes('relation') || error.message.includes('does not exist')){
+        log('💡 提示: 表可能不存在或表名错误', 'warning');
+      }
+    }else{
+      const count = data ? data.length : 0;
+      log(`✅ 查询成功! 返回 ${count} 条数据`, 'success');
+      
+      if(count > 0){
+        log(`   第一条数据: ${JSON.stringify(data[0], null, 2)}`, 'info');
+      }else{
+        log('⚠️ 表中没有数据', 'warning');
+        log('💡 提示: 请先完成一次测试，或检查 RLS 策略', 'warning');
+      }
+    }
+  }catch(e){
+    log(`❌ 查询异常: ${e.message}`, 'error');
+    if(e.stack) log(`   堆栈: ${e.stack}`, 'error');
+  }
+}
+
+// 测试 localStorage
+function testLocalStorage(){
+  log('🧪 开始测试 localStorage...', 'info');
+  
+  try{
+    const STORAGE_KEYS=['nct_responses','nct_test_responses'];
+    let found = false;
+    
+    STORAGE_KEYS.forEach(key => {
+      const data = localStorage.getItem(key);
+      if(data){
+        found = true;
+        const parsed = JSON.parse(data);
+        log(`✅ 找到数据 (key: ${key})`, 'success');
+        log(`   数据条数: ${parsed.length}`, 'info');
+        if(parsed.length > 0){
+          log(`   第一条: ${JSON.stringify(parsed[0], null, 2)}`, 'info');
+        }
+      }else{
+        log(`⚠️ 未找到数据 (key: ${key})`, 'warning');
+      }
+    });
+    
+    if(!found){
+      log('❌ localStorage 中没有找到任何测试数据', 'error');
+      log('💡 提示: 请先完成一次测试', 'warning');
+    }
+  }catch(e){
+    log(`❌ localStorage 测试失败: ${e.message}`, 'error');
+  }
+}
+
+// 页面加载完成后自动测试
+window.addEventListener('load', function(){
+  log('✅ 页面加载完成', 'success');
+  log('📍 当前 URL: ' + window.location.href, 'info');
+  log('📍 协议: ' + window.location.protocol, 'info');
+  log('📍 主机: ' + window.location.hostname, 'info');
+  
+  // 延迟自动测试
+  setTimeout(() => {
+    log('🤖 开始自动诊断...', 'info');
+    testSupabase();
+    setTimeout(testLocalStorage, 1000);
+  }, 1000);
+});
+
+// 显示页面内容
+setTimeout(() => {
+  document.getElementById('content').innerHTML = `
+    <h3>🎯 诊断完成</h3>
+    <p>请查看上方的调试面板，了解具体的错误信息。</p>
+    <p><strong>常见问题：</strong></p>
+    <ul>
+      <li>如果看到 "RLS" 相关错误，需要在 Supabase 添加 SELECT 策略</li>
+      <li>如果看到 "relation does not exist"，表名可能不对</li>
+      <li>如果看到 "CORS" 错误，需要在 Supabase 配置允许的域名</li>
+      <li>如果 localStorage 没有数据，请先完成一次测试</li>
+    </ul>
+    <p><strong>下一步操作：</strong></p>
+    <ol>
+      <li>查看上方调试面板的日志</li>
+      <li>根据错误提示进行修复</li>
+      <li>刷新页面重新测试</li>
+    </ol>
+  `;
+}, 3000);
+</script>
+
+</body>
+</html>
